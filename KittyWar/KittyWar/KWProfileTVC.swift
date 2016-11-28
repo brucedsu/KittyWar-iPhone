@@ -18,4 +18,8 @@ class KWProfileTVC: UITableViewController {
         usernameLabel.text = KWUserDefaults.getUsername()
     }
     
+    @IBAction func logout(_ sender: UIBarButtonItem) {
+        
+    }
+    
 }

@@ -36,6 +36,7 @@ UITableViewDataSource, UITableViewDelegate {
     @IBOutlet private weak var playerCatBornWithAbilityButton: UIButton!
     @IBOutlet private weak var playerCatRandomAbilityButton: UIButton!
     @IBOutlet private weak var playerChanceCardCollectionView: UICollectionView!
+    @IBOutlet weak var playerStrategyLabel: UILabel!
     
     @IBOutlet private weak var opponentView: UIView!
     @IBOutlet private weak var opponentCatImageView: UIImageView!
@@ -342,6 +343,10 @@ UITableViewDataSource, UITableViewDelegate {
         
     }
     
+    @IBAction func strategyDecided(_ sender: UIButton) {
+        
+    }
+    
     // MARK: - UITableViewDataSource
     
     public func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -407,8 +412,8 @@ UITableViewDataSource, UITableViewDelegate {
     // MARK: - UICollectionViewDelegate
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let width: CGFloat = collectionView.frame.width - 3 * 8
-        let height: CGFloat = width / 3 * 4
+        let width: CGFloat = (collectionView.frame.width - 3.0 * 8.0) / 4.0
+        let height: CGFloat = width / 3.0 * 4.0
         
         return CGSize(width: width, height: height)
     }

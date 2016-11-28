@@ -506,6 +506,8 @@ class KWNetwork: NSObject {
                     return
                 }
                 
+                print("Setup response: \(setupResponse)")
+
                 let opponentCatResponse = [UInt8]() + setupResponse[0...4]
                 
                 let (opponentCatResponseFlag, opponentCatSize, _, opponentCatID, _) =
