@@ -45,7 +45,7 @@ enum SelectMoveResult {
     case failure
 }
 
-enum SelectChanceResult {
+enum SelectChanceCardResult {
     case success
     case failure
 }
@@ -59,6 +59,9 @@ let useAbilityNotification = Notification.Name("useAbilityNotification")
 let nextPhaseNotification = Notification.Name("readyNotification")
 let selectMoveNotification = Notification.Name("selectMoveNotification")
 let selectChanceNotification = Notification.Name("selectChanceNotification")
+let readyForShowingCardNotificaiton = Notification.Name("readyForShowingCardNotificaition")
+let readyForStrategySettlementNotification = Notification.Name("readyForStrategySettlementNotification")
+let selectChanceCardNotification = Notification.Name("selectChanceCardNotification")
 
 struct InfoKey {
     static let result = "result"
@@ -68,6 +71,11 @@ struct InfoKey {
     static let randomAbilityID = "randomAbilityID"
     static let chanceCards = "chanceCards"
     static let selectedMoveID = "selectedMoveID"
+    static let opponentMoveID = "opponentMoveID"
+    static let opponentChanceID = "opponentChanceID"
+    static let playerHP = "playerHP"
+    static let opponentHP = "opponentHP"
+    static let selectedChanceCardID = "selectedChanceCardID"
 }
 
 class KWNetwork: NSObject {
@@ -126,7 +134,7 @@ class KWNetwork: NSObject {
         static let randomAbility: UInt8 = 56
         static let useAbility: UInt8 = 101
         static let selectMove: UInt8 = 102
-        static let selectChance: UInt8 = 103
+        static let selectChanceCard: UInt8 = 103
         
         static let userProfile: UInt8 = 3
         static let allCards: UInt8 = 4
@@ -607,7 +615,7 @@ class KWNetwork: NSObject {
         
         var bytes = getMessagePrefix(flag: GameServerFlag.selectMove,
                                      sizeOfData: 1)
-        bytes += [UInt8(moveID)]
+        bytes += DSConvertor.stringToBytes(string: "\(moveID)")
         let selectMoveData = Data(bytes: bytes)
         
         DispatchQueue(label: "Network Queue").async {
@@ -634,7 +642,150 @@ class KWNetwork: NSObject {
                 print("Send data failed, error: \(error)")
             }
         }
+    }
+    
+    func sendReadyForShowingCard() {
+        if !connectToGameServer() {
+            return
+        }
+        
+        let bytes = getMessagePrefix(flag: GameServerFlag.ready,
+                                     sizeOfData: 0)
+        let readyData = Data(bytes: bytes)
+        
+        DispatchQueue(label: "Network Queue").async {
+            switch self.client.send(data: readyData) {
+            case .success:
+                // ready response
+                guard let readyResponse = self.client.read(4) else {
+                    return
+                }
+                
+                let (readyResponseFlag, readyResponseSize, _, _, _) =
+                    self.parseGameServerResponse(response: readyResponse, bodyType: .int)
+                
+                // opponent move
+                guard let opponentMoveResponse = self.client.read(5) else {
+                    return
+                }
+                
+                let (opponentMoveResponseFlag, opponentMoveResponseSize, _, opponentMoveID, _) =
+                    self.parseGameServerResponse(response: opponentMoveResponse, bodyType: .int)
+                
+                // opponent chance
+                guard let opponentChanceResponse = self.client.read(5) else {
+                    return
+                }
+                
+                let (opponentChanceResponseFlag, opponentChanceResponseSize, _, opponentChanceID, _) =
+                    self.parseGameServerResponse(response: opponentChanceResponse, bodyType: .int)
+                
+                
+                DispatchQueue.main.async {
+                    let nc = NotificationCenter.default
+                    nc.post(name: readyForShowingCardNotificaiton,
+                            object: nil,
+                            userInfo: [InfoKey.opponentMoveID: opponentMoveID,
+                                       InfoKey.opponentChanceID: opponentChanceID])
+                }
+            case .failure (let error):
+                print("Send data failed, error: \(error)")
+            }
+        }
+    }
+    
+    func sendReadyForStrategySettlement() {
+        if !connectToGameServer() {
+            return
+        }
+        
+        let bytes = getMessagePrefix(flag: GameServerFlag.ready,
+                                     sizeOfData: 0)
+        let readyData = Data(bytes: bytes)
+        
+        DispatchQueue(label: "Network Queue").async {
+            switch self.client.send(data: readyData) {
+            case .success:
+                // ready response
+                guard let readyResponse = self.client.read(4) else {
+                    return
+                }
+                
+                let (readyResponseFlag, readyResponseSize, _, _, _) =
+                    self.parseGameServerResponse(response: readyResponse, bodyType: .int)
+                
+                // player HP
+                guard let playerHPResponse = self.client.read(5) else {
+                    return
+                }
+                
+                let (playerHPResponseFlag, playerHPResponseSize, _, playerHP, _) =
+                    self.parseGameServerResponse(response: playerHPResponse, bodyType: .int)
+                
+                // opponent HP
+                guard let opponentHPResponse = self.client.read(5) else {
+                    return
+                }
+                
+                let (opponentHPResponseFlag, opponentHPResponseSize, _, opponentHP, _) =
+                    self.parseGameServerResponse(response: opponentHPResponse, bodyType: .int)
+                
+                // chance cards
+                guard let chanceCardsResponse = self.client.read(10) else {
+                    return
+                }
+                
+                let (chanceCardsResponseFlag, chanceCardsResponseSize, _, _, chanceCards) =
+                    self.parseGameServerResponse(response: chanceCardsResponse, bodyType: .intArray)
 
+                DispatchQueue.main.async {
+                    let nc = NotificationCenter.default
+                    nc.post(name: readyForStrategySettlementNotification,
+                            object: nil,
+                            userInfo: [InfoKey.playerHP: playerHP,
+                                       InfoKey.opponentHP: opponentHP,
+                                       InfoKey.chanceCards: chanceCards])
+                }
+            case .failure (let error):
+                print("Send data failed, error: \(error)")
+            }
+        }
+    }
+    
+    func selectChanceCard(chanceCardID: Int) {
+        if !connectToGameServer() {
+            return
+        }
+        
+        var bytes = getMessagePrefix(flag: GameServerFlag.selectChanceCard,
+                                     sizeOfData: 1)
+        bytes += DSConvertor.stringToBytes(string: "\(chanceCardID)")
+        let selectChanceCardData = Data(bytes: bytes)
+        
+        DispatchQueue(label: "Network Queue").async {
+            switch self.client.send(data: selectChanceCardData) {
+            case .success:
+                guard let response = self.client.read(5) else {
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    // parse response
+                    let (flag, sizeOfBody, _, bodyInt, _) =
+                        self.parseGameServerResponse(response: response, bodyType: .int)
+                    
+                    // check response
+                    if flag == GameServerFlag.selectChanceCard && sizeOfBody == 1 && bodyInt == 1 {
+                        let nc = NotificationCenter.default
+                        nc.post(name: selectChanceCardNotification,
+                                object: nil,
+                                userInfo: [InfoKey.result: SelectChanceCardResult.success, InfoKey.selectedChanceCardID: chanceCardID])
+                    }
+                }
+            case .failure (let error):
+                print("Send data failed, error: \(error)")
+            }
+        }
     }
     
 }

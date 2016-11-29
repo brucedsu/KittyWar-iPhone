@@ -106,6 +106,19 @@ UITableViewDataSource, UITableViewDelegate {
         }
     }
     
+    private func moveIDToString(move: Int) -> String {
+        switch move {
+        case 0:
+            return "Purr"
+        case 1:
+            return "Guard"
+        case 2:
+            return "Scratch"
+        default:
+            return "Unknown"
+        }
+    }
+    
     private var currentPhase = KWGamePhase.beforeGame {
         didSet {
             showAlert(title: "\(currentPhase). \(phaseToString(phase: currentPhase)) Starts", message: "")
@@ -137,11 +150,11 @@ UITableViewDataSource, UITableViewDelegate {
         }
         
         if strategyDescription != "" {
-            text = text + " + " + strategyDescription
+            text = text + (abilityDescription != "" ? " + " : "") + strategyDescription
         }
         
         if chanceCardDescription != "" {
-            text = text + " + " + chanceCardDescription
+            text = text + (strategyDescription != "" ? " + " : "") + chanceCardDescription
         }
         
         if text == "" {
@@ -531,14 +544,30 @@ UITableViewDataSource, UITableViewDelegate {
     }
     
     @IBAction func readyButtonPressed(_ sender: UIButton) {
-        // register to notification center
         let nc = NotificationCenter.default
-        nc.addObserver(self,
-                       selector: #selector(KWGameVC.handleNextPhaseNotification(notification:)),
-                       name: nextPhaseNotification,
-                       object: nil)
-        
-        KWNetwork.shared.sendReadyMessageToGameServer()
+
+        if currentPhase == KWGamePhase.enactingStrategies {
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleReadyForShowingCardNotification(notification:)),
+                           name: readyForShowingCardNotificaiton,
+                           object: nil)
+            
+            KWNetwork.shared.sendReadyForShowingCard()
+        } else if currentPhase == KWGamePhase.showingCards {
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleReadyForStrategySettlementNotification(notification:)),
+                           name: readyForStrategySettlementNotification,
+                           object: nil)
+            
+            KWNetwork.shared.sendReadyForStrategySettlement()
+        } else {
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleNextPhaseNotification(notification:)),
+                           name: nextPhaseNotification,
+                           object: nil)
+            
+            KWNetwork.shared.sendReadyMessageToGameServer()
+        }
     }
     
     func handleNextPhaseNotification(notification: Notification) {
@@ -550,6 +579,38 @@ UITableViewDataSource, UITableViewDelegate {
             case .failure:
                 break
             }
+        }
+    }
+    
+    // 1. next phase (98) 2. reveal opponent move (58)  3. reveal opponent chance (59)
+    func handleReadyForShowingCardNotification(notification: Notification) {
+        startNextPhase()
+        
+        let opponentMoveID = notification.userInfo?[InfoKey.opponentMoveID] as! Int
+        let opponentChanceCardID = notification.userInfo?[InfoKey.opponentChanceID] as? Int
+        
+        dismiss(animated: true) {
+            self.showAlert(title: "Opponent Cards", message: "Opponent selected move: \(self.moveIDToString(move: opponentMoveID))" + (opponentChanceCardID == nil ? "" : ", chance card: \(self.availableChanceCards[opponentChanceCardID!].title)"))
+
+        }
+    }
+    
+    func handleReadyForStrategySettlementNotification(notification: Notification) {
+        startNextPhase()
+        
+        let playerHPDelta = notification.userInfo?[InfoKey.playerHP] as! Int
+        let opponentHPDelta = notification.userInfo?[InfoKey.opponentHP] as! Int
+        let chanceCards = notification.userInfo?[InfoKey.chanceCards] as? [Int]
+        
+        playerCatHP = playerCatHP + playerHPDelta
+        opponentCatHP = opponentCatHP + opponentHPDelta
+        
+        if chanceCards != nil {
+            for chanceCard in chanceCards! {
+                playerChanceCards.append(availableChanceCards[chanceCard])
+            }
+            
+            playerChanceCardCollectionView.reloadData()
         }
     }
     
@@ -621,6 +682,49 @@ UITableViewDataSource, UITableViewDelegate {
         let height: CGFloat = width / 3.0 * 4.0
         
         return CGSize(width: width, height: height)
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, didHighlightItemAt indexPath: IndexPath) {
+        if currentPhase == KWGamePhase.enactingStrategies {
+            
+            // register to notification center
+            let nc = NotificationCenter.default
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleSelectChanceCardNotification(notification:)),
+                           name: selectChanceCardNotification,
+                           object: nil)
+            
+            let chanceCard = availableChanceCards[indexPath.row]
+            KWNetwork.shared.selectChanceCard(chanceCardID: chanceCard.id)
+        } else {
+            showAlert(title: "Wrong Phase", message: "Can't use chance card during current phase")
+        }
+    }
+    
+    func handleSelectChanceCardNotification(notification: Notification) {
+        if let result = notification.userInfo?[InfoKey.result] as? SelectChanceCardResult {
+            if let selectedChanceCardID = notification.userInfo?[InfoKey.selectedChanceCardID] as? Int {
+                switch result {
+                case .success:
+                    chanceCardDescription = availableChanceCards[selectedChanceCardID].title
+                    showAlert(title: "Selected \(chanceCardDescription))", message: "")
+                    
+                    var index = 0
+                    for chanceCard in playerChanceCards {
+                        if chanceCard.id == selectedChanceCardID {
+                            break
+                        }
+                        index += 1
+                    }
+                    
+                    playerChanceCards.remove(at: index)
+                    playerChanceCardCollectionView.reloadData()
+                    break
+                case .failure:
+                    break
+                }
+            }
+        }
     }
 
 }
