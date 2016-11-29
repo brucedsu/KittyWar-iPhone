@@ -135,6 +135,9 @@ class KWNetwork: NSObject {
         static let useAbility: UInt8 = 101
         static let selectMove: UInt8 = 102
         static let selectChanceCard: UInt8 = 103
+        static let damageModified: UInt8 = 52
+        static let gainPlayerHP: UInt8 = 50
+        static let gainOpponentHP: UInt8 = 51
         
         static let userProfile: UInt8 = 3
         static let allCards: UInt8 = 4
@@ -540,7 +543,7 @@ class KWNetwork: NSObject {
         
         var bytes = getMessagePrefix(flag: GameServerFlag.useAbility,
                                      sizeOfData: 1)
-        bytes += [UInt8(abilityID)]
+        bytes += DSConvertor.stringToBytes(string: "\(abilityID)")
         let useAbilityData = Data(bytes: bytes)
         
         DispatchQueue(label: "Network Queue").async {
@@ -556,7 +559,7 @@ class KWNetwork: NSObject {
                         self.parseGameServerResponse(response: response, bodyType: .int)
                     
                     // check response
-                    if flag == GameServerFlag.useAbility && sizeOfBody == 1 && bodyInt == 1 {  // used ability
+                    if (flag == GameServerFlag.useAbility || flag == GameServerFlag.damageModified) {  // used ability
                         print("Successfully used ability \(abilityID)")
                         
                         let nc = NotificationCenter.default
@@ -714,21 +717,36 @@ class KWNetwork: NSObject {
                 let (readyResponseFlag, readyResponseSize, _, _, _) =
                     self.parseGameServerResponse(response: readyResponse, bodyType: .int)
                 
-                // player HP
-                guard let playerHPResponse = self.client.read(5) else {
+                var playerHP: Int? = 0
+                var opponentHP: Int? = 0
+                
+                // hp response1
+                guard let hpResponse1 = self.client.read(5) else {
                     return
                 }
                 
-                let (playerHPResponseFlag, playerHPResponseSize, _, playerHP, _) =
-                    self.parseGameServerResponse(response: playerHPResponse, bodyType: .int)
+                let (hpResponse1Flag, hpResponse1Size, _, hp1, _) =
+                    self.parseGameServerResponse(response: hpResponse1, bodyType: .int)
                 
-                // opponent HP
-                guard let opponentHPResponse = self.client.read(5) else {
+                if hpResponse1Flag == GameServerFlag.gainPlayerHP {
+                    playerHP = hp1
+                } else {
+                    opponentHP = hp1
+                }
+                
+                // hp response2
+                guard let hpResponse2 = self.client.read(5) else {
                     return
                 }
                 
-                let (opponentHPResponseFlag, opponentHPResponseSize, _, opponentHP, _) =
-                    self.parseGameServerResponse(response: opponentHPResponse, bodyType: .int)
+                let (hpResponse2Flag, hpResponse2Size, _, hp2, _) =
+                    self.parseGameServerResponse(response: hpResponse2, bodyType: .int)
+                
+                if hpResponse2Flag == GameServerFlag.gainPlayerHP {
+                    playerHP = hp2
+                } else {
+                    opponentHP = hp2
+                }
                 
                 // chance cards
                 guard let chanceCardsResponse = self.client.read(10) else {

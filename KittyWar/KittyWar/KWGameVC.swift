@@ -121,7 +121,13 @@ UITableViewDataSource, UITableViewDelegate {
     
     private var currentPhase = KWGamePhase.beforeGame {
         didSet {
-            showAlert(title: "\(currentPhase). \(phaseToString(phase: currentPhase)) Starts", message: "")
+            if presentedViewController != nil {
+                dismiss(animated: true) {
+                    self.showAlert(title: "\(self.currentPhase). \(self.phaseToString(phase: self.currentPhase)) Starts", message: "")
+                }
+            } else {
+                self.showAlert(title: "\(self.currentPhase). \(self.phaseToString(phase: self.currentPhase)) Starts", message: "")
+            }
         }
     }
     
@@ -391,6 +397,8 @@ UITableViewDataSource, UITableViewDelegate {
         if let result = notification.userInfo?[InfoKey.result] as? SelectCatResult {
             switch result {
             case .success:
+                showAlert(title: "Select Cat Success", message: "Successfully select \(availableCats[selectedCatID!].title)")
+                
                 // get cat
                 playerCat = availableCats[selectedCatID!]
                 
@@ -454,6 +462,8 @@ UITableViewDataSource, UITableViewDelegate {
         
         // set phase
         currentPhase = KWGamePhase.prelude
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     @IBAction func basicMoveButtenPressed(_ sender: UIButton) {
@@ -499,6 +509,8 @@ UITableViewDataSource, UITableViewDelegate {
                 }
             }
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     @IBAction func abilityButtonPressed(_ sender: UIButton) {
@@ -541,6 +553,8 @@ UITableViewDataSource, UITableViewDelegate {
                 break
             }
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     @IBAction func readyButtonPressed(_ sender: UIButton) {
@@ -580,6 +594,8 @@ UITableViewDataSource, UITableViewDelegate {
                 break
             }
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     // 1. next phase (98) 2. reveal opponent move (58)  3. reveal opponent chance (59)
@@ -591,27 +607,32 @@ UITableViewDataSource, UITableViewDelegate {
         
         dismiss(animated: true) {
             self.showAlert(title: "Opponent Cards", message: "Opponent selected move: \(self.moveIDToString(move: opponentMoveID))" + (opponentChanceCardID == nil ? "" : ", chance card: \(self.availableChanceCards[opponentChanceCardID!].title)"))
-
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     func handleReadyForStrategySettlementNotification(notification: Notification) {
         startNextPhase()
         
-        let playerHPDelta = notification.userInfo?[InfoKey.playerHP] as! Int
-        let opponentHPDelta = notification.userInfo?[InfoKey.opponentHP] as! Int
+        let newPlayerHP = notification.userInfo?[InfoKey.playerHP] as! Int
+        let newOpponentHP = notification.userInfo?[InfoKey.opponentHP] as! Int
         let chanceCards = notification.userInfo?[InfoKey.chanceCards] as? [Int]
         
-        playerCatHP = playerCatHP + playerHPDelta
-        opponentCatHP = opponentCatHP + opponentHPDelta
+        playerCatHP = newPlayerHP
+        opponentCatHP = newOpponentHP
         
         if chanceCards != nil {
+            playerChanceCards = [KWChanceCard]()
+            
             for chanceCard in chanceCards! {
                 playerChanceCards.append(availableChanceCards[chanceCard])
             }
             
             playerChanceCardCollectionView.reloadData()
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - UITableViewDataSource
@@ -694,7 +715,7 @@ UITableViewDataSource, UITableViewDelegate {
                            name: selectChanceCardNotification,
                            object: nil)
             
-            let chanceCard = availableChanceCards[indexPath.row]
+            let chanceCard = playerChanceCards[indexPath.row]
             KWNetwork.shared.selectChanceCard(chanceCardID: chanceCard.id)
         } else {
             showAlert(title: "Wrong Phase", message: "Can't use chance card during current phase")
@@ -707,7 +728,7 @@ UITableViewDataSource, UITableViewDelegate {
                 switch result {
                 case .success:
                     chanceCardDescription = availableChanceCards[selectedChanceCardID].title
-                    showAlert(title: "Selected \(chanceCardDescription))", message: "")
+                    showAlert(title: "Selected \(chanceCardDescription)", message: "")
                     
                     var index = 0
                     for chanceCard in playerChanceCards {
@@ -725,6 +746,8 @@ UITableViewDataSource, UITableViewDelegate {
                 }
             }
         }
+        
+        NotificationCenter.default.removeObserver(self)
     }
 
 }
