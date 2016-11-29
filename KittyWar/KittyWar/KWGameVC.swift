@@ -171,6 +171,16 @@ UITableViewDataSource, UITableViewDelegate {
     }
     
     private func startNextPhase() {
+        // loosing condition
+        if playerCatHP == 0 || opponentCatHP == 20 {
+            showAlert(title: "You Lose!", message: "Good game, well played!")
+        }
+        
+        // winning condition
+        if playerCatHP == 20 || opponentCatHP == 0 {
+            showAlert(title: "You Win!", message: "You are awesome!")
+        }
+
         if currentPhase == KWGamePhase.postlude {
             currentPhase = KWGamePhase.prelude
             
