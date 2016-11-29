@@ -64,13 +64,109 @@ UITableViewDataSource, UITableViewDelegate {
         }
     }
     
+    // abilities
     var playerCatAbilities = [KWAbilityCard]()
+    var randomAbilityCooldown = -1
+    
+    // chance cards
     var playerChanceCards = [KWChanceCard]()
 
     var opponentCat: KWCatCard? = nil
     var opponentCatHP: Int = 0 {
         didSet {
             opponentCatHPLabel.text = "HP: \(opponentCatHP)"
+        }
+    }
+    
+    private struct KWGamePhase {
+        static let beforeGame = 0
+        static let prelude = 1
+        static let enactingStrategies = 2
+        static let showingCards = 3
+        static let strategySettlement = 4
+        static let postlude = 5
+    }
+    
+    private func phaseToString(phase: Int) -> String {
+        switch phase {
+        case KWGamePhase.beforeGame:
+            return "Before Game"
+        case KWGamePhase.prelude:
+            return "Prelude"
+        case KWGamePhase.enactingStrategies:
+            return "Enacting Strategies"
+        case KWGamePhase.showingCards:
+            return "Showing Cards"
+        case KWGamePhase.strategySettlement:
+            return "Strategy Settlement"
+        case KWGamePhase.postlude:
+            return "Postlude"
+        default:
+            return ""
+        }
+    }
+    
+    private var currentPhase = KWGamePhase.beforeGame {
+        didSet {
+            showAlert(title: "\(currentPhase). \(phaseToString(phase: currentPhase)) Starts", message: "")
+        }
+    }
+    
+    var abilityDescription = "" {
+        didSet {
+            updateStrategyLabel()
+        }
+    }
+    
+    var strategyDescription = "" {
+        didSet {
+            updateStrategyLabel()
+        }
+    }
+    var chanceCardDescription = "" {
+        didSet {
+            updateStrategyLabel()
+        }
+    }
+    
+    func updateStrategyLabel() {
+        var text = ""
+        
+        if abilityDescription != "" {
+            text = abilityDescription
+        }
+        
+        if strategyDescription != "" {
+            text = text + " + " + strategyDescription
+        }
+        
+        if chanceCardDescription != "" {
+            text = text + " + " + chanceCardDescription
+        }
+        
+        if text == "" {
+            text = "No strategy"
+        }
+        
+        playerStrategyLabel.text = text
+    }
+    
+    private func startNextPhase() {
+        if currentPhase == KWGamePhase.postlude {
+            currentPhase = KWGamePhase.prelude
+            
+            // set the cooldown
+            if randomAbilityCooldown == 0 || randomAbilityCooldown == 5 {
+                randomAbilityCooldown += 5
+            }
+            
+            abilityDescription = ""
+            strategyDescription = ""
+            chanceCardDescription = ""
+            
+            playerStrategyLabel.text = "No strategy"
+        } else {
+            currentPhase = currentPhase + 1
         }
     }
     
@@ -334,17 +430,127 @@ UITableViewDataSource, UITableViewDelegate {
         playerCatBornWithAbilityButton.setImage(UIImage(named: playerCatAbilities[0].title), for: .normal)
         playerCatRandomAbilityButton.setImage(UIImage(named: playerCatAbilities[1].title), for: .normal)
         
+        // setup abilities cool down
+        if playerCatAbilities[1].id == 7 {
+            randomAbilityCooldown = 10
+        }
+        
         playerChanceCards.append(availableChanceCards[chanceCards[0]])
         playerChanceCards.append(availableChanceCards[chanceCards[1]])
         playerChanceCardCollectionView.reloadData()
+        
+        // set phase
+        currentPhase = KWGamePhase.prelude
     }
     
     @IBAction func basicMoveButtenPressed(_ sender: UIButton) {
-        
+        if currentPhase == KWGamePhase.enactingStrategies {
+            let moveID = sender.tag
+            
+            // register to notification center
+            let nc = NotificationCenter.default
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleSelectMoveNotification(notification:)),
+                           name: selectMoveNotification,
+                           object: nil)
+
+            KWNetwork.shared.selectMove(moveID: moveID)
+        } else {
+            showAlert(title: "Wrong Phase", message: "Can't use basic movements during \(phaseToString(phase: currentPhase))")
+        }
     }
     
-    @IBAction func strategyDecided(_ sender: UIButton) {
+    private func moveToString(move: Int) -> String {
+        switch move {
+        case 0:
+            return "Purr"
+        case 1:
+            return "Guard"
+        case 2:
+            return "Scratch"
+        default:
+            return "Unknown"
+        }
+    }
+    
+    func handleSelectMoveNotification(notification: Notification) {
+        if let result = notification.userInfo?[InfoKey.result] as? SelectMoveResult {
+            if let selectedMoveID = notification.userInfo?[InfoKey.selectedMoveID] as? Int {
+                switch result {
+                case .success:
+                    strategyDescription = moveToString(move: selectedMoveID)
+                    showAlert(title: "Selected \(moveToString(move: selectedMoveID))", message: "")
+                    break
+                case .failure:
+                    break
+                }
+            }
+        }
+    }
+    
+    @IBAction func abilityButtonPressed(_ sender: UIButton) {
+        let ability = playerCatAbilities[sender.tag]
         
+        if ability.id != 7 {  // if passive ability, return
+            showAlert(title: "Passive Ability!", message: "")
+            return
+        }
+        
+        if ability.phase != currentPhase {  // wrong phase
+            showAlert(title: "Wrong Phase!", message: "")
+            return
+        }
+        
+        // only can use critical hit
+        if randomAbilityCooldown == 10 {  // ability is ready
+            randomAbilityCooldown = 0
+            
+            // register to notification center
+            let nc = NotificationCenter.default
+            nc.addObserver(self,
+                           selector: #selector(KWGameVC.handleUseAbility(notification:)),
+                           name: useAbilityNotification,
+                           object: nil)
+            
+            KWNetwork.shared.useAbility(abilityID: ability.id)
+        } else {
+            showAlert(title: "Use Ability Error", message: "Ability is on cooldown")
+        }
+    }
+    
+    func handleUseAbility(notification: Notification) {
+        if let result = notification.userInfo?[InfoKey.result] as? UseAbilityResult {
+            switch result {
+            case .success:
+                showAlert(title: "Use Ability Success", message: "")
+                break
+            case .failure:
+                break
+            }
+        }
+    }
+    
+    @IBAction func readyButtonPressed(_ sender: UIButton) {
+        // register to notification center
+        let nc = NotificationCenter.default
+        nc.addObserver(self,
+                       selector: #selector(KWGameVC.handleNextPhaseNotification(notification:)),
+                       name: nextPhaseNotification,
+                       object: nil)
+        
+        KWNetwork.shared.sendReadyMessageToGameServer()
+    }
+    
+    func handleNextPhaseNotification(notification: Notification) {
+        if let result = notification.userInfo?[InfoKey.result] as? ReadyResult {
+            switch result {
+            case .success:
+                startNextPhase()
+                break
+            case .failure:
+                break
+            }
+        }
     }
     
     // MARK: - UITableViewDataSource
@@ -370,7 +576,6 @@ UITableViewDataSource, UITableViewDelegate {
         return cell
     }
 
-    
     // MARK: - UITableViewDelegate
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {

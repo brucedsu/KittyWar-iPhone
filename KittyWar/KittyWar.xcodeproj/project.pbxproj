@@ -225,10 +225,10 @@
 		EBF8E5581DE5902400551ED6 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				EBF8E55B1DE607A900551ED6 /* KWChanceCard.swift */,
 				EBF8E55D1DE6082300551ED6 /* KWCard.swift */,
 				EBF8E5561DE5901F00551ED6 /* KWCatCard.swift */,
 				EBF8E5591DE593E000551ED6 /* KWAbilityCard.swift */,
-				EBF8E55B1DE607A900551ED6 /* KWChanceCard.swift */,
 			);
 			name = Models;
 			sourceTree = "<group>";
